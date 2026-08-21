@@ -87,8 +87,6 @@ def evaluate(window_minutes: int = 5) -> dict:
         con.row_factory = sqlite3.Row
         train_rows = con.execute("SELECT * FROM transactions WHERE split_set='train' AND is_attack=0").fetchall()
         con.close()
-        from data.schemas import Transaction
-        from datetime import datetime
         train_txns = [
             Transaction(
                 txn_id=r["txn_id"],
