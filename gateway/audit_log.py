@@ -12,6 +12,7 @@ import logging
 import os
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 from data.schemas import Alert
 
@@ -66,10 +67,9 @@ class AuditLog:
         )
 
         try:
-            con = self._connect()
-            con.execute(INSERT_SQL, row)
-            con.commit()
-            con.close()
+            with self._connect() as con:
+                con.execute(INSERT_SQL, row)
+                con.commit()
             logger.info(f"[audit] Written alert_id={alert.alert_id}")
         except sqlite3.IntegrityError:
             logger.warning(f"[audit] Duplicate alert_id={alert.alert_id} — skipped.")
@@ -78,21 +78,24 @@ class AuditLog:
 
     def fetch_recent(self, limit: int = 50) -> list[dict[str, Any]]:
         """Fetch the most recent alert entries, newest first."""
-        con = sqlite3.connect(self._db_path)
-        con.row_factory = sqlite3.Row
-        rows = con.execute(
-            """SELECT * FROM audit_log
-               ORDER BY timestamp DESC
-               LIMIT ?""",
-            (limit,),
-        ).fetchall()
-        con.close()
-        return [dict(r) for r in rows]
-
-    def fetch_all(self) -> list[dict]:
         con = self._connect()
-        con.row_factory = sqlite3.Row
-        cur = con.execute("SELECT * FROM audit_log ORDER BY timestamp ASC")
-        rows = [dict(r) for r in cur.fetchall()]
-        con.close()
-        return rows
+        try:
+            con.row_factory = sqlite3.Row
+            rows = con.execute(
+                """SELECT * FROM audit_log
+                   ORDER BY timestamp DESC
+                   LIMIT ?""",
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            con.close()
+
+    def fetch_all(self) -> list[dict[str, Any]]:
+        con = self._connect()
+        try:
+            con.row_factory = sqlite3.Row
+            cur = con.execute("SELECT * FROM audit_log ORDER BY timestamp ASC")
+            return [dict(r) for r in cur.fetchall()]
+        finally:
+            con.close()

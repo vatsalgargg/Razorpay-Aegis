@@ -46,9 +46,9 @@ def _random_device(seed: int | None = None) -> str:
 
 
 def _sequential_bin(base: str, offset: int) -> str:
-    """Return a BIN incremented by offset (stays 6 digits)."""
-    num = int(base) + offset
-    return str(num)[:6]
+    """Return a BIN incremented by offset (always stays 6 digits via modulo wrap)."""
+    num = (int(base) + offset) % 1_000_000
+    return str(num).zfill(6)
 
 
 # ---------------------------------------------------------------------------

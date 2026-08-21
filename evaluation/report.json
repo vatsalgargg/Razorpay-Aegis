@@ -1,15 +1,15 @@
 {
-  "timestamp": "2026-08-21T06:17:36.524677",
+  "timestamp": "2026-08-21T08:11:10.410194+00:00",
   "split": "test",
   "window_minutes": 5,
   "total_windows": 142,
   "tp": 28,
-  "fp": 7,
+  "fp": 4,
   "fn": 2,
-  "tn": 105,
-  "precision": 0.8,
+  "tn": 108,
+  "precision": 0.875,
   "recall": 0.9333,
-  "f1": 0.8615,
+  "f1": 0.9032,
   "fp_cost_assumption_inr_per_event": 200.0,
-  "fp_cost_total_inr": 1400.0
+  "fp_cost_total_inr": 800.0
 }

@@ -35,7 +35,7 @@ MODEL_PATH = Path(os.getenv("MODEL_PATH", "detection/models/isolation_forest.pkl
 
 ZSCORE_VELOCITY_THRESHOLD = 2.5
 ZSCORE_DECLINE_THRESHOLD  = 2.5
-IF_CONTAMINATION          = 0.03
+IF_CONTAMINATION          = 0.03  # 3% outlier threshold for Isolation Forest
 
 
 # ---------------------------------------------------------------------------
@@ -43,16 +43,20 @@ IF_CONTAMINATION          = 0.03
 # ---------------------------------------------------------------------------
 
 class RollingStats:
-    """Welford online algorithm for running mean and variance."""
+    """
+    Welford online algorithm for cumulative running mean and variance.
+    NOTE: This is a cumulative tracker (all observations ever seen),
+    not a bounded sliding-window. Over time the baseline becomes very stable
+    which is desirable for fraud detection — sudden spikes stand out against
+    the long-run average.
+    """
 
-    def __init__(self, maxlen: int = 200) -> None:
-        self._buffer: deque[float] = deque(maxlen=maxlen)
+    def __init__(self) -> None:
         self._mean = 0.0
         self._M2 = 0.0
         self._n = 0
 
     def update(self, x: float) -> None:
-        self._buffer.append(x)
         self._n += 1
         delta = x - self._mean
         self._mean += delta / self._n
@@ -212,7 +216,7 @@ class StatisticalDetector:
             is_if_anomaly = self._if_model.predict(X)[0] == -1
             decision = float(self._if_model.decision_function(X)[0])
             if_score = max(0.0, min(1.0, 0.5 - decision))
-            if is_if_anomaly or if_score > 0.50:
+            if is_if_anomaly and if_score > 0.52:
                 triggered.append(f"isolation_forest={if_score:.3f}")
 
         is_anomaly = bool(triggered)
@@ -223,10 +227,10 @@ class StatisticalDetector:
             self._decline_stats.update(fv.decline_rate)
 
         composite_score = max(
-            min(abs(z_vel) / 10.0, 1.0),
-            min(abs(z_dec) / 10.0, 1.0),
+            min(max(z_vel, 0) / 10.0, 1.0),
+            min(max(z_dec, 0) / 10.0, 1.0),
             if_score,
-            0.88 if ("card_testing_signature" in str(triggered) or "sequential_bin_signature" in str(triggered)) else 0.0,
+            0.88 if any("card_testing_signature" in t or "sequential_bin_signature" in t for t in triggered) else 0.0,
         )
 
         return AnomalyResult(

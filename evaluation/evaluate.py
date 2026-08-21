@@ -16,7 +16,7 @@ import logging
 import os
 import sqlite3
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -98,9 +98,9 @@ def evaluate(window_minutes: int = 5) -> dict:
                 ip_address=r["ip_address"],
                 device_id=r["device_id"],
                 merchant_id=r["merchant_id"],
-                status=r["status"],
+                status=TxnStatus(r["status"]),
                 is_attack=bool(r["is_attack"]),
-                attack_type=r["attack_type"],
+                attack_type=AttackType(r["attack_type"]),
                 attack_window_id=r["attack_window_id"],
             )
             for r in train_rows
@@ -185,7 +185,7 @@ def evaluate(window_minutes: int = 5) -> dict:
     print("-" * 60)
 
     results = {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "split": "test",
         "window_minutes": window_minutes,
         "total_windows": len(window_results),
@@ -218,7 +218,7 @@ def evaluate(window_minutes: int = 5) -> dict:
         print(f"\n  [WARN] Could not save metrics to DB: {e}")
 
     # Save JSON report
-    report_path = Path("evaluation/report.json")
+    report_path = Path(__file__).resolve().parent / "report.json"
     report_path.parent.mkdir(exist_ok=True)
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)

@@ -56,9 +56,12 @@ logger = logging.getLogger(__name__)
 WINDOW_MINUTES = int(os.getenv("WINDOW_MINUTES", "5"))
 MAX_BUFFER     = int(os.getenv("MAX_BUFFER_TXN", "2000"))
 
+import threading
+
 _txn_buffer: deque[Transaction] = deque(maxlen=MAX_BUFFER)
 _recent_alerts: deque[dict] = deque(maxlen=200)
 _recent_txns: deque[dict] = deque(maxlen=60)
+_state_lock = threading.Lock()
 _detector: StatisticalDetector
 _action_layer: ActionLayer
 _audit_log: AuditLog
@@ -178,13 +181,14 @@ def ingest(txn: Transaction) -> dict[str, Any]:
     Accept a single transaction, update the rolling window,
     run detection, and return any alert raised.
     """
-    _txn_buffer.append(txn)
-    _recent_txns.appendleft(txn.model_dump(mode="json"))
+    with _state_lock:
+        _txn_buffer.append(txn)
+        _recent_txns.appendleft(txn.model_dump(mode="json"))
 
-    # Build rolling window strictly bounded within [now - WINDOW_MINUTES, now]
-    now = txn.timestamp
-    window_start = now - timedelta(minutes=WINDOW_MINUTES)
-    window = [t for t in _txn_buffer if window_start <= t.timestamp <= now]
+        # Build rolling window strictly bounded within [now - WINDOW_MINUTES, now]
+        now = txn.timestamp
+        window_start = now - timedelta(minutes=WINDOW_MINUTES)
+        window = [t for t in _txn_buffer if window_start <= t.timestamp <= now]
 
     # Need minimum warmup buffer to calculate meaningful rolling statistics
     if len(window) < 10:
@@ -214,7 +218,8 @@ def ingest(txn: Transaction) -> dict[str, Any]:
                 "llm_used":          alert.classification.llm_used,
                 "llm_provider":      alert.classification.llm_provider or ("Groq AI" if alert.classification.llm_used else "Deterministic Fallback"),
             }
-            _recent_alerts.appendleft(alert_data)
+            with _state_lock:
+                _recent_alerts.appendleft(alert_data)
 
     return {
         "txn_id":        txn.txn_id,
@@ -234,17 +239,19 @@ def get_dashboard() -> HTMLResponse:
 @app.get("/alerts")
 def get_alerts(limit: int = 20) -> list[dict]:
     """Return recent REAL attack alerts only (newest first). Excludes 'none' classifications."""
-    real_alerts = [
-        a for a in _recent_alerts
-        if a.get("attack_type") not in ("none", None)
-    ]
-    return real_alerts[:limit]
+    with _state_lock:
+        real_alerts = [
+            a for a in _recent_alerts
+            if a.get("attack_type") not in ("none", None)
+        ]
+        return real_alerts[:limit]
 
 
 @app.get("/transactions")
 def get_transactions(limit: int = 30) -> list[dict]:
     """Return recent ingested transactions for live UI ticker."""
-    return list(_recent_txns)[:limit]
+    with _state_lock:
+        return list(_recent_txns)[:limit]
 
 
 @app.get("/audit")

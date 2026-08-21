@@ -128,7 +128,7 @@ class LLMReasoningClient:
                     explanation=str(data["explanation"]),
                     recommended_action=RecommendedAction(data["recommended_action"]),
                     llm_used=True,
-                    llm_provider="Groq (120B)",
+                    llm_provider=f"Groq ({groq_model})",
                 )
             except Exception as e:
                 logger.warning(f"[llm] Groq call failed ({e}) — trying Gemini or fallback.")
@@ -139,7 +139,7 @@ class LLMReasoningClient:
         if self._gemini_client:
             try:
                 t0 = time.monotonic()
-                gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+                gemini_model = GEMINI_MODEL
                 response = self._gemini_client.models.generate_content(
                     model=gemini_model,
                     contents=user_prompt,
@@ -163,7 +163,7 @@ class LLMReasoningClient:
                     explanation=str(data["explanation"]),
                     recommended_action=RecommendedAction(data["recommended_action"]),
                     llm_used=True,
-                    llm_provider="Google Gemini",
+                    llm_provider=f"Gemini ({gemini_model})",
                 )
             except Exception as e:
                 raise LLMUnavailableError(f"Gemini API error: {e}") from e

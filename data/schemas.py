@@ -85,7 +85,7 @@ class AnomalyResult(BaseModel):
     window_start: datetime
     window_end: datetime
     is_anomaly: bool
-    anomaly_score: float               # Isolation Forest: -1 to 1 (higher = more anomalous)
+    anomaly_score: float               # Composite anomaly score: 0–1 (higher = more anomalous)
     zscore_velocity: float
     zscore_decline: float
     triggered_features: list[str]      # Which features crossed threshold

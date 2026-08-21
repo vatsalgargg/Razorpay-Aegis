@@ -11,6 +11,7 @@ or merchant list. It can only write to the audit log. A human decides all action
 from __future__ import annotations
 
 import logging
+import threading
 import uuid
 from datetime import datetime, timezone
 
@@ -25,14 +26,23 @@ logger = logging.getLogger(__name__)
 class ActionLayer:
     """
     Coordinates LLM classification → fallback → audit logging.
-    One instance per running detector process.
+    One instance per running detector process. Thread-safe.
     """
 
     def __init__(self, audit_log: AuditLog) -> None:
         self._llm = LLMReasoningClient()
         self._audit = audit_log
-        self._last_classification: Classification | None = None
-        self._last_classified_time: datetime | None = None
+        self._lock = threading.Lock()
+        self._burst_cache: dict[str, tuple[Classification, datetime]] = {}
+
+    def _get_signature_key(self, anomaly: AnomalyResult) -> str:
+        """Derive a pattern signature key from triggered features and metrics."""
+        triggers = "_".join(sorted(anomaly.triggered_features))
+        fv = anomaly.feature_vector
+        # Group by pattern type & decline magnitude
+        dec_bucket = round(fv.decline_rate * 2) / 2  # 0.0, 0.5, 1.0
+        amt_bucket = "micro" if fv.amount_mean <= 100.0 else "normal"
+        return f"{triggers}:{dec_bucket}:{amt_bucket}"
 
     def process(self, anomaly: AnomalyResult) -> Alert | None:
         """
@@ -42,29 +52,32 @@ class ActionLayer:
         if not anomaly.is_anomaly:
             return None
 
-        # --- LLM classification (with 15s burst reuse to respect API rate limits) ---
+        # --- LLM classification (with 15s burst reuse per signature to respect API rate limits) ---
         now = datetime.now(timezone.utc)
+        sig_key = self._get_signature_key(anomaly)
         classification = None
 
-        if (
-            self._last_classification is not None
-            and self._last_classified_time is not None
-            and (now - self._last_classified_time).total_seconds() < 15.0
-        ):
-            # Reuse active burst classification
-            classification = self._last_classification
-        else:
-            try:
-                classification = self._llm.classify(anomaly)
-                self._last_classification = classification
-                self._last_classified_time = now
-                logger.info(
-                    f"[action] LLM classified: {classification.attack_type.value} "
-                    f"confidence={classification.confidence:.2f}"
-                )
-            except LLMUnavailableError as e:
-                logger.warning(f"[action] LLM unavailable, using fallback: {e}")
-                classification = statistical_classify(anomaly, reason=str(e))
+        with self._lock:
+            cached = self._burst_cache.get(sig_key)
+            if cached is not None:
+                cached_class, cached_time = cached
+                if (now - cached_time).total_seconds() < 15.0:
+                    classification = cached_class
+
+            if classification is None:
+                try:
+                    classification = self._llm.classify(anomaly)
+                    self._burst_cache[sig_key] = (classification, now)
+                    logger.info(
+                        f"[action] LLM classified: {classification.attack_type.value} "
+                        f"confidence={classification.confidence:.2f}"
+                    )
+                except LLMUnavailableError as e:
+                    logger.warning(f"[action] LLM unavailable, using fallback: {e}")
+                    classification = statistical_classify(anomaly, reason=str(e))
+                except Exception as e:
+                    logger.error(f"[action] Unexpected error during classification, falling back: {e}")
+                    classification = statistical_classify(anomaly, reason=f"Internal error: {e}")
 
         # --- Assemble alert ---
         alert = Alert(
