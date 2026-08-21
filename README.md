@@ -7,7 +7,9 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Groq](https://img.shields.io/badge/Groq%20LPU-120B%20%7C%2070B-F55036?style=for-the-badge&logo=groq&logoColor=white)](https://groq.com)
 [![Google Gemini](https://img.shields.io/badge/Google%20Gemini-1.5%20%7C%202.5-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://aistudio.google.com)
-[![Tests](https://img.shields.io/badge/Tests-39%2F39%20Passing-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)]()
+[![CI](https://github.com/vatsalgargg/Razorpay-Aegis/actions/workflows/ci.yml/badge.svg)](https://github.com/vatsalgargg/Razorpay-Aegis/actions/workflows/ci.yml)
+[![Security](https://github.com/vatsalgargg/Razorpay-Aegis/actions/workflows/security.yml/badge.svg)](https://github.com/vatsalgargg/Razorpay-Aegis/actions/workflows/security.yml)
+[![Docker](https://github.com/vatsalgargg/Razorpay-Aegis/actions/workflows/docker.yml/badge.svg)](https://github.com/vatsalgargg/Razorpay-Aegis/actions/workflows/docker.yml)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
 <br>

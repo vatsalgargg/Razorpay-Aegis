@@ -1,0 +1,54 @@
+name: CI — Test & ML Quality Gate
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-and-evaluate:
+    name: Test Suite & ML Regression Guardrail
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff
+
+      - name: Code Quality & Linting (Ruff)
+        run: |
+          ruff check . --ignore E501,F401,E402
+
+      - name: Run Full Test Suite (39 Tests)
+        run: |
+          python -m pytest tests/ -v --asyncio-mode=strict
+
+      - name: Seed Database & Train Statistical Model
+        run: |
+          python -m data.seed_db --force
+
+      - name: Run Held-Out Test Evaluation & Recall Gate
+        run: |
+          python -m evaluation.evaluate
+
+      - name: Upload Evaluation Artifacts
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-report
+          path: evaluation/report.json

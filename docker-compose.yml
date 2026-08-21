@@ -1,14 +1,16 @@
 version: "3.9"
 
 services:
-  risk-manager:
+  aegis-gateway:
     build: .
-    container_name: razorpay_risk_manager
+    container_name: razorpay_aegis
     ports:
       - "8000:8000"
     environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GROQ_MODEL=${GROQ_MODEL:-openai/gpt-oss-120b}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-1.5-flash}
       - LLM_TIMEOUT_SECONDS=${LLM_TIMEOUT_SECONDS:-8}
       - DB_PATH=/app/data/razorpay_risk.db
       - WINDOW_MINUTES=${WINDOW_MINUTES:-5}
@@ -21,7 +23,7 @@ services:
         uvicorn api.main:app --host 0.0.0.0 --port 8000
       "
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
