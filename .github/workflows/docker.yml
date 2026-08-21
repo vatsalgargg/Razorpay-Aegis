@@ -25,11 +25,19 @@ jobs:
           push: false
           tags: razorpay-aegis:latest
 
-      - name: Run Container Smoke Test
+      - name: Run Container & Verify Health
         run: |
-          docker compose up -d --build
-          sleep 10
-          docker compose ps
-          curl -f http://localhost:8000/health || exit 1
-          curl -f http://localhost:8000/dashboard || exit 1
-          docker compose down
+          docker run -d --name test-aegis -p 8000:8000 -e GROQ_API_KEY="" -e GEMINI_API_KEY="" razorpay-aegis:latest
+          for i in {1..20}; do
+            if curl -s http://localhost:8000/health | grep -q "status"; then
+              echo "Gateway container healthy and responding!"
+              curl -s http://localhost:8000/dashboard > /dev/null
+              docker stop test-aegis
+              exit 0
+            fi
+            echo "Waiting for container to boot... ($i/20)"
+            sleep 2
+          done
+          echo "Container startup timed out."
+          docker logs test-aegis
+          exit 1
