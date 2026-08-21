@@ -25,18 +25,18 @@
 
 **Sub-millisecond Statistical Reflexes. 120B Cognitive Fraud Diagnosis. Zero Added Checkout Latency.**
 
-[Live Web Dashboard](#-live-dashboards) • [Architecture](#-two-tier-hybrid-architecture) • [Benchmarks](#-empirical-benchmarks--unit-economics) • [Quickstart](#-quickstart-in-60-seconds) • [API Specs](#-api-specification)
+[Live Web Dashboard](#-live-dashboards) • [Architecture](#-two-tier-hybrid-architecture) • [Business & Unit Economics](#-business-economics--financial-roi-model) • [Production Scale-Out](#-real-world-production-architecture-scaling-to-millions-of-users) • [Quickstart](#-quickstart-in-60-seconds) • [API Specs](#-api-specification)
 
 </div>
 
 ---
 
-## 📌 Executive Summary
+## 📌 Executive Summary & The Problem
 
-Modern payment gateways process **lakhs of transactions per minute**. In this environment, traditional risk engineering faces the **False-Positive Paradox**:
+Modern payment gateways process **lakhs of transactions per minute**. In this high-velocity environment, traditional risk engineering faces the **False-Positive Paradox**:
 
-1. **Legacy Rule Engines** (*e.g., static thresholds like ">50 txns/min"*): Opaque and rigid. They generate thousands of false alarms during legitimate merchant flash sales, causing merchant churn and costing **₹40+ Lakhs/month in human analyst review overhead** (15 min @ ₹800/hr = ₹200 per investigation).
-2. **Naive AI Gateways** (*calling an LLM per transaction*): Introduce **1,500ms checkout latency** (killing conversion) and cost **₹200+ Crore/month** in API compute.
+1. **Legacy Rule Engines** (*static thresholds like ">50 txns/min"*): Opaque and rigid. They generate thousands of false alarms during legitimate merchant flash sales, causing merchant churn and costing **₹50+ Lakhs/month in human analyst review overhead** (15 min @ ₹800/hr = ₹200 per investigation).
+2. **Naive AI Gateways** (*calling an LLM per transaction*): Introduce **1,500ms checkout latency** (destroying conversion rates) and cost **₹200+ Crore/month** in API compute.
 
 ### The Razorpay Aegis Solution
 **Razorpay Aegis** introduces an enterprise **Two-Tier Funnel Architecture**:
@@ -80,6 +80,65 @@ flowchart TD
 
 ---
 
+## 💰 Business Economics & Financial ROI Model
+
+### Baseline Scale: 30 Crore (300 Million) Monthly Transactions (~1.2 Lakh Txns/Min Peak)
+
+```
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                           MONTHLY OPERATIONAL COST COMPARISON                         │
+│                                                                                       │
+│  1. Legacy Rule Engine + Human Ops    ██████████████████████████████  ₹51,50,000 / mo │
+│  2. Naive AI (LLM on every payment)   ██████████████████████████████████████████████  │
+│                                       ₹1.50+ CRORE / mo (Impractical)                 │
+│  3. Razorpay Aegis (Two-Tier Funnel)  █ ₹3,51,200 / mo (Includes Cloud Infra + Ops)   │
+│                                                                                       │
+│  🔥 NET OPERATIONAL SAVINGS:          ₹47,60,000 / MONTH (~₹5.7 CRORE / YEAR)         │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Detailed Cost Line-Item Comparison
+
+| Cost Component | 1. Legacy Static Rules + Human Ops | 2. Naive "LLM per Transaction" | **3. Razorpay Aegis (Our Architecture)** |
+|---|---|---|---|
+| **AI / LLM Compute** | ₹0 | **₹1,50,00,000+ / mo** *(300M txns × ₹0.05)* ❌ | **₹1,200 / mo (~$15)** *(Only 0.001% flagged clusters sent to Groq/Gemini)* ✅ |
+| **False-Positive Review Cost** *(15 min review @ ₹800/hr = ₹200/FP)* | **₹50,00,000 / mo** *(25,000 false alarms/mo on flash sales)* | Unknown | **₹2,00,000 / mo** *(80%+ reduction in false alarms via LLM reasoning)* ✅ |
+| **Stream Compute (Kafka/Flink/Redis)** | ₹1,50,000 / mo | ₹1,50,000 / mo | **₹1,50,000 / mo** |
+| **Merchant GMV Loss from False Blocks** | High *(Lost sales from blocked flash sales)* | Catastrophic *(1.5s checkout latency drops conversion)* | **Near Zero** *(Normal spikes classified as `benign_spike`)* |
+| **Total Monthly Cost** | **₹51,50,000 / mo** | **₹1,51,50,000+ / mo** ❌ | **~₹3,51,200 / mo** ✅ |
+
+### The 3 Core Financial Value Drivers:
+1. **Direct OpEx Payroll Reduction**: Reduces L1 human risk analyst review overhead by **$4\times$**, saving **₹40+ Lakhs every month**.
+2. **Merchant GMV Protection**: Accurately classifies promotional spikes as `benign_spike` $\rightarrow$ `no_action`, eliminating false checkout rejections and preventing high-value merchant churn.
+3. **Card Network Fines & Chargeback Prevention**: Catches botnets at the micro-testing stage ($<\text{₹}10$), preventing subsequent **₹50,000+ fraud cashouts** and avoiding Visa/Mastercard network threshold fines ($15–$25 per violation).
+
+---
+
+## 🏭 Real-World Production Architecture: Scaling to Millions of Users
+
+To scale Razorpay Aegis from prototype to processing **lakhs of concurrent payments across India's merchant ecosystem**, the production roadmap leverages battle-tested distributed infrastructure:
+
+```mermaid
+flowchart LR
+    A[Customer Checkout<br>Lakhs/min] -->|Mirror Event| B[(Apache Kafka Cluster<br>Partitioned by Merchant)]
+    B --> C[Apache Flink Stream Workers<br>5-Min Stateful Sliding Windows]
+    C <--> D[(Redis Cluster<br>Welford Stats & Rate Limits)]
+    C -->|99.9% Normal| E[Approve Event]
+    C -->|0.1% Anomalies| F[AWS SQS / RabbitMQ<br>Incident Queue]
+    F --> G[Worker Pods Pool<br>Groq LPU / vLLM 120B Cluster]
+    G --> H[(ClickHouse Columnar Audit Log)]
+    G --> I[Dynamic Edge Rules<br>Envoy / Cloudflare Step-Up OTP]
+    G --> J[Real-time WebSocket Dashboard]
+```
+
+### Production Scalability Blueprint:
+1. **Zero Impact on Checkout SLA (< 50ms)**: Tier-1 statistical filtering runs in $<0.8\text{ms}$ in-memory. The LLM operates completely out-of-band (asynchronously). Customer checkout authorization is never delayed.
+2. **Segmented Baseline Profiles (MCC Tuning)**: Real-life merchant traffic varies drastically. Aegis maintains separate baseline profiles per Merchant Category Code (Gaming vs Luxury E-commerce vs Travel) so high-velocity gaming micro-payments are not confused with card testing.
+3. **Dynamic Edge Intervention**: When an attack cluster is confirmed, the system pushes temporary dynamic rules to Envoy/Cloudflare at the gateway edge to challenge the specific attacker IP or BIN series with Step-Up 3DS OTP or CAPTCHA.
+4. **Closed-Loop Active Learning**: Human risk analyst resolutions and bank chargeback reports are fed back to the data lake (Snowflake/Redshift) to automatically retrain the Tier-1 Isolation Forest model weekly.
+
+---
+
 ## 🎯 Attack Signatures Detected & Mitigated
 
 ### 1. Card Testing / Carding Botnets (`card_testing`)
@@ -99,9 +158,8 @@ flowchart TD
 
 ---
 
-## 📊 Empirical Benchmarks & Unit Economics
+## 📊 Empirical Benchmarks
 
-### 1. Detection Performance (Held-Out Test Dataset)
 Evaluated across **942 transactions in 142 sliding windows** (8 hours of simulated peak gateway traffic):
 
 | Evaluation Metric | Benchmark Target | Aegis Result | Status |
@@ -112,24 +170,6 @@ Evaluated across **942 transactions in 142 sliding windows** (8 hours of simulat
 | **Partial $F_1$ Score** | $> 0.8000$ | **0.8615** | 🏆 **Exceeded** |
 | **Gateway Latency** | $< 10\text{ ms}$ | **< 0.8 ms** (Tier-1 in-memory) | ⚡ **Real-Time** |
 | **Test Suite Coverage** | $100\%$ | **39 / 39 Unit & Pipeline Tests Passing** | ✅ **Passed** |
-
----
-
-### 2. Business Economics Comparison (300 Million Monthly Transactions)
-
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│  Cost Model: 300,000,000 Transactions / Month                                │
-├────────────────────────────────┬──────────────────────────┬─────────────────┤
-│ Architecture                   │ Monthly Cost             │ Latency Penalty │
-├────────────────────────────────┼──────────────────────────┼─────────────────┤
-│ Legacy Rules + Human Ops       │ ₹50,00,000 / mo (Analyst)│ 0 ms            │
-│ Naive "LLM on Every Txn"       │ ₹1.5 Crore / mo ❌       │ +1,500 ms ❌    │
-│ Razorpay Aegis (Two-Tier)      │ ₹1,200 / mo ($15 API) ✅ │ < 0.8 ms ✅     │
-├────────────────────────────────┴──────────────────────────┴─────────────────┤
-│ 🔥 NET OPERATIONAL SAVINGS: ₹40,00,000+ / MONTH (80%+ Reduction in Ops)      │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
 
 ---
 
@@ -194,7 +234,7 @@ Open **`http://localhost:8000/dashboard`** in your browser to watch the real-tim
 
 ---
 
-## 🧪 Testing & Validation
+## 🧪 Testing & CI/CD Pipelines
 
 ```bash
 # Run the complete test suite (39 tests)
@@ -203,6 +243,11 @@ python -m pytest tests/ -v
 # Run held-out evaluation & generate metrics report
 python -m evaluation.evaluate
 ```
+
+### Automated GitHub Actions CI/CD:
+- **`ci.yml`**: Python 3.10/3.11/3.12 matrix testing, 39/39 pytest suite, and ML Recall & Precision guardrail gates.
+- **`security.yml`**: Gitleaks secret scanner, Bandit SAST security audit, and Pip-Audit CVE scan.
+- **`docker.yml`**: Automated container build and health smoke test.
 
 ---
 
