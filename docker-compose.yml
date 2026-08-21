@@ -1,0 +1,27 @@
+version: "3.9"
+
+services:
+  risk-manager:
+    build: .
+    container_name: razorpay_risk_manager
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - LLM_TIMEOUT_SECONDS=${LLM_TIMEOUT_SECONDS:-8}
+      - DB_PATH=/app/data/razorpay_risk.db
+      - WINDOW_MINUTES=${WINDOW_MINUTES:-5}
+      - FORCE_LLM_TIMEOUT=${FORCE_LLM_TIMEOUT:-false}
+    volumes:
+      - ./data_vol:/app/data
+    command: >
+      sh -c "
+        python -m data.seed_db &&
+        uvicorn api.main:app --host 0.0.0.0 --port 8000
+      "
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

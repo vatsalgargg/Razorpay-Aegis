@@ -1,0 +1,60 @@
+# Environment and Secrets (CRITICAL: NEVER COMMIT API KEYS)
+.env
+*.env
+!.env.example
+.env.local
+.env.*.local
+
+# Databases & Cache
+*.db
+*.sqlite
+*.sqlite3
+razorpay_risk.db
+
+# Machine Learning Artifacts & Pickles
+*.pkl
+*.pickle
+detection/models/*.pkl
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDEs & System
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.log
