@@ -139,7 +139,50 @@ def seed(db_path: Path = DB_PATH, force: bool = False) -> None:
     con.close()
 
     print(f"[seed] Inserted {len(rows)} transactions into {db_path}")
-    print("[seed] Done. DB ready.")
+    
+    # Train and save Isolation Forest baseline model
+    try:
+        from detection.features import compute_features, sliding_windows
+        from detection.statistical import StatisticalDetector, MODEL_PATH
+        from datetime import datetime
+
+        print("[seed] Training baseline Isolation Forest model on normal traffic...")
+        con = sqlite3.connect(db_path)
+        con.row_factory = sqlite3.Row
+        train_rows = con.execute(
+            "SELECT * FROM transactions WHERE split_set='train' AND is_attack=0 ORDER BY timestamp ASC"
+        ).fetchall()
+        con.close()
+
+        train_txns = [
+            Transaction(
+                txn_id=r["txn_id"],
+                timestamp=datetime.fromisoformat(r["timestamp"]),
+                card_bin=r["card_bin"],
+                card_last4=r["card_last4"],
+                amount=r["amount"],
+                currency=r["currency"],
+                ip_address=r["ip_address"],
+                device_id=r["device_id"],
+                merchant_id=r["merchant_id"],
+                status=r["status"],
+                is_attack=bool(r["is_attack"]),
+                attack_type=r["attack_type"],
+                attack_window_id=r["attack_window_id"],
+            )
+            for r in train_rows
+        ]
+        windows = sliding_windows(train_txns, window_minutes=5)
+        fvs = [compute_features(w, ws, we) for ws, we, w in windows if w]
+        if fvs:
+            detector = StatisticalDetector()
+            detector.fit(fvs)
+            detector.save(MODEL_PATH)
+            print(f"[seed] Trained and saved model to {MODEL_PATH}")
+    except Exception as e:
+        print(f"[seed] Warning: could not auto-train model during seed: {e}")
+
+    print("[seed] Done. DB and models ready.")
 
 
 def get_connection(db_path: Path = DB_PATH) -> sqlite3.Connection:

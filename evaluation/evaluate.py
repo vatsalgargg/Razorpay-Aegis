@@ -77,9 +77,40 @@ def evaluate(window_minutes: int = 5) -> dict:
     print("  Razorpay AI Risk Manager — Held-Out Test Evaluation")
     print("=" * 60)
 
-    # Load model
+    # Load or train model
     detector = StatisticalDetector()
-    detector.load()
+    if MODEL_PATH.exists():
+        detector.load()
+    else:
+        print("[evaluate] Model not found — training on baseline train dataset...")
+        con = sqlite3.connect(DB_PATH)
+        con.row_factory = sqlite3.Row
+        train_rows = con.execute("SELECT * FROM transactions WHERE split_set='train' AND is_attack=0").fetchall()
+        con.close()
+        from data.schemas import Transaction
+        from datetime import datetime
+        train_txns = [
+            Transaction(
+                txn_id=r["txn_id"],
+                timestamp=datetime.fromisoformat(r["timestamp"]),
+                card_bin=r["card_bin"],
+                card_last4=r["card_last4"],
+                amount=r["amount"],
+                currency=r["currency"],
+                ip_address=r["ip_address"],
+                device_id=r["device_id"],
+                merchant_id=r["merchant_id"],
+                status=r["status"],
+                is_attack=bool(r["is_attack"]),
+                attack_type=r["attack_type"],
+                attack_window_id=r["attack_window_id"],
+            )
+            for r in train_rows
+        ]
+        train_windows = sliding_windows(train_txns, window_minutes=window_minutes)
+        fvs = [compute_features(w, ws, we) for ws, we, w in train_windows if w]
+        detector.fit(fvs)
+        detector.save(MODEL_PATH)
 
     audit = AuditLog()
     action = ActionLayer(audit)
