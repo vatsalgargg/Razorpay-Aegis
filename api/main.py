@@ -263,6 +263,15 @@ def ingest(txn: Transaction) -> dict[str, Any]:
             with _state_lock:
                 _recent_alerts.appendleft(alert_data)
 
+            # Submit confirmed attack pattern to Cross-Merchant Threat Mesh
+            if alert_data.get("attack_type") in ("card_testing", "bin_attack"):
+                _threat_mesh.observe(
+                    device_id=txn.device_id,
+                    ip_address=txn.ip_address,
+                    card_bin=txn.card_bin,
+                    merchant_id=txn.merchant_id,
+                )
+
     return {
         "txn_id":        txn.txn_id,
         "is_anomaly":    result.is_anomaly,

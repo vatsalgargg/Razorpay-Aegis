@@ -94,17 +94,6 @@ class ActionLayer:
         # --- Write to audit log (append-only) ---
         self._audit.write(alert)
 
-        # --- Submit to Cross-Merchant Threat Mesh (non-blocking, async-safe) ---
-        if self._threat_mesh and classification.attack_type.value in ("card_testing", "bin_attack"):
-            fv = anomaly.feature_vector
-            # Use window metadata as fingerprint source (no single-txn PII)
-            self._threat_mesh.observe(
-                device_id   = f"window:{fv.window_start.isoformat()}",
-                ip_address  = f"192.168.{int(fv.unique_ips)}.0",  # Coarsened — no real PII
-                card_bin    = str(int(fv.bin_concentration * 1000)),
-                merchant_id = getattr(fv, "merchant_id", "unknown"),
-            )
-
         logger.info(
             f"[action] Alert {alert.alert_id[:8]}... written | "
             f"action={classification.recommended_action.value} | "
