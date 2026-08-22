@@ -29,9 +29,10 @@ class AttackType(str, Enum):
 
 
 class RecommendedAction(str, Enum):
-    FLAG = "flag"
-    HOLD_FOR_REVIEW = "hold_for_review"
-    NO_ACTION = "no_action"
+    FLAG              = "flag"
+    HOLD_FOR_REVIEW   = "hold_for_review"
+    NO_ACTION         = "no_action"
+    CHALLENGE_STEP_UP = "challenge_step_up"   # Dynamic 3DS / OTP friction (Collective Immune System)
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +91,9 @@ class AnomalyResult(BaseModel):
     zscore_decline: float
     triggered_features: list[str]      # Which features crossed threshold
     feature_vector: FeatureVector
+    # Collective Immune System fields
+    cuckoo_match: bool = False         # True = flagged by Cross-Merchant Threat Mesh
+    collective_threat_label: str = ""  # "threat_mesh" when cuckoo_match=True
 
 
 # ---------------------------------------------------------------------------

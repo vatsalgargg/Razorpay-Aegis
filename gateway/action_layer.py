@@ -15,8 +15,9 @@ import threading
 import uuid
 from datetime import datetime, timezone
 
-from data.schemas import Alert, AnomalyResult, Classification
+from data.schemas import Alert, AnomalyResult, Classification, RecommendedAction
 from gateway.audit_log import AuditLog
+from gateway.threat_mesh import ThreatMesh
 from reasoning.fallback import statistical_classify
 from reasoning.llm_client import LLMReasoningClient, LLMUnavailableError
 
@@ -25,14 +26,15 @@ logger = logging.getLogger(__name__)
 
 class ActionLayer:
     """
-    Coordinates LLM classification → fallback → audit logging.
+    Coordinates LLM classification → fallback → audit logging → threat mesh.
     One instance per running detector process. Thread-safe.
     """
 
-    def __init__(self, audit_log: AuditLog) -> None:
-        self._llm = LLMReasoningClient()
-        self._audit = audit_log
-        self._lock = threading.Lock()
+    def __init__(self, audit_log: AuditLog, threat_mesh: ThreatMesh | None = None) -> None:
+        self._llm         = LLMReasoningClient()
+        self._audit       = audit_log
+        self._threat_mesh = threat_mesh
+        self._lock        = threading.Lock()
         self._burst_cache: dict[str, tuple[Classification, datetime]] = {}
 
     def _get_signature_key(self, anomaly: AnomalyResult) -> str:
@@ -91,6 +93,17 @@ class ActionLayer:
 
         # --- Write to audit log (append-only) ---
         self._audit.write(alert)
+
+        # --- Submit to Cross-Merchant Threat Mesh (non-blocking, async-safe) ---
+        if self._threat_mesh and classification.attack_type.value in ("card_testing", "bin_attack"):
+            fv = anomaly.feature_vector
+            # Use window metadata as fingerprint source (no single-txn PII)
+            self._threat_mesh.observe(
+                device_id   = f"window:{fv.window_start.isoformat()}",
+                ip_address  = f"192.168.{int(fv.unique_ips)}.0",  # Coarsened — no real PII
+                card_bin    = str(int(fv.bin_concentration * 1000)),
+                merchant_id = getattr(fv, "merchant_id", "unknown"),
+            )
 
         logger.info(
             f"[action] Alert {alert.alert_id[:8]}... written | "

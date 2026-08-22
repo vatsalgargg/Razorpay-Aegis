@@ -35,10 +35,12 @@ load_dotenv()
 from api.dashboard_html import HTML_TEMPLATE
 from data.schemas import Transaction, TxnStatus
 from data.seed_db import seed, DB_PATH
+from detection.cuckoo import CuckooFilter
 from detection.features import compute_features, sliding_windows
 from detection.statistical import StatisticalDetector, MODEL_PATH
 from gateway.action_layer import ActionLayer
 from gateway.audit_log import AuditLog
+from gateway.threat_mesh import ThreatMesh
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -65,6 +67,8 @@ _state_lock = threading.Lock()
 _detector: StatisticalDetector
 _action_layer: ActionLayer
 _audit_log: AuditLog
+_cuckoo: CuckooFilter
+_threat_mesh: ThreatMesh
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +77,7 @@ _audit_log: AuditLog
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _detector, _action_layer, _audit_log
+    global _detector, _action_layer, _audit_log, _cuckoo, _threat_mesh
 
     logger.info("[startup] Seeding database (if needed)...")
     seed(force=False)
@@ -89,9 +93,16 @@ async def lifespan(app: FastAPI):
         # Train on the seeded train-split data
         _train_detector()
 
-    _action_layer = ActionLayer(_audit_log)
+    logger.info("[startup] Initialising Cross-Merchant Collective Immune System...")
+    _cuckoo      = CuckooFilter(capacity=1_000_000)
+    _threat_mesh = ThreatMesh(_cuckoo)
+    _threat_mesh.start()
+
+    _action_layer = ActionLayer(_audit_log, threat_mesh=_threat_mesh)
     logger.info("[startup] Risk Manager ready.")
     yield
+    logger.info("[shutdown] Stopping threat mesh worker...")
+    _threat_mesh.stop()
     logger.info("[shutdown] Exiting.")
 
 
@@ -180,7 +191,37 @@ def ingest(txn: Transaction) -> dict[str, Any]:
     """
     Accept a single transaction, update the rolling window,
     run detection, and return any alert raised.
+
+    Fast path: Cuckoo Filter check against known threat vaccines (< 0.1ms).
+    Slow path: Statistical anomaly detection + LLM classification.
     """
+    # ── FAST PATH: Cross-Merchant Collective Immune System ──────────────────
+    # Check if this device/IP/BIN has a matching vaccine rule.
+    # If so, immediately escalate to 3DS step-up challenge without running
+    # the full detection pipeline (saves ~15ms of compute).
+    if _threat_mesh.is_known_threat(
+        device_id=txn.device_id,
+        ip_address=txn.ip_address,
+        card_bin=txn.card_bin,
+    ):
+        logger.info(
+            f"[ingest] 🛡️  CUCKOO MATCH — Collective Immune System challenge "
+            f"for txn={txn.txn_id} device={txn.device_id[:8]}..."
+        )
+        return {
+            "txn_id":        txn.txn_id,
+            "is_anomaly":    True,
+            "anomaly_score": 0.95,
+            "cuckoo_match":  True,
+            "alert": {
+                "attack_type":        "collective_threat",
+                "recommended_action": "challenge_step_up",
+                "explanation":        "Transaction flagged by Cross-Merchant Collective Immune System. Dynamic 3DS verification required.",
+                "confidence":         0.95,
+            },
+        }
+
+    # ── SLOW PATH: Full statistical detection pipeline ───────────────────────
     with _state_lock:
         _txn_buffer.append(txn)
         _recent_txns.appendleft(txn.model_dump(mode="json"))
@@ -217,6 +258,7 @@ def ingest(txn: Transaction) -> dict[str, Any]:
                 "triggered_features": result.triggered_features,
                 "llm_used":          alert.classification.llm_used,
                 "llm_provider":      alert.classification.llm_provider or ("Groq AI" if alert.classification.llm_used else "Deterministic Fallback"),
+                "cuckoo_match":      False,
             }
             with _state_lock:
                 _recent_alerts.appendleft(alert_data)
@@ -225,6 +267,7 @@ def ingest(txn: Transaction) -> dict[str, Any]:
         "txn_id":        txn.txn_id,
         "is_anomaly":    result.is_anomaly,
         "anomaly_score": result.anomaly_score,
+        "cuckoo_match":  False,
         "alert":         alert_data,
     }
 
@@ -290,6 +333,19 @@ def get_metrics() -> dict[str, Any]:
         "fp_cost_inr":   fp_cost_inr,
         "note":          "Recall requires full test-set replay. Run evaluation/evaluate.py for complete metrics.",
     }
+
+
+@app.get("/threat-mesh/status")
+def get_threat_mesh_status() -> dict[str, Any]:
+    """
+    Return real-time telemetry for the Cross-Merchant Collective Immune System.
+
+    Shows:
+      - Number of active vaccine rules
+      - Cuckoo Filter load factor and entry count
+      - Details of each active vaccine (anonymized fingerprints)
+    """
+    return _threat_mesh.status()
 
 
 if __name__ == "__main__":
